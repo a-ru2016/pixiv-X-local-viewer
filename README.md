@@ -4,4 +4,4 @@
 　
 - intex.htmlとserver.pyを使って見る
 
-- https://github.com/xuejianxianzun/PixivBatchDownloaderを使う
+- https://github.com/xuejianxianzun/PixivBatchDownloader を使う
