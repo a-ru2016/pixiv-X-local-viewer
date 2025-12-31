@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Twitter Saver (Popup & Video)",
+  "version": "3.1",
+  "permissions": [
+    "downloads",
+    "activeTab",
+    "storage" 
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://pbs.twimg.com/*",
+    "https://video.twimg.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Twitter Saver Control"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["content.js"]
+    }
+  ]
+}

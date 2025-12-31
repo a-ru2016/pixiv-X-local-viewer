@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Local Viewer</title>
+    <style>
+        :root { 
+            --bg: #050505; --card-bg: #111; --text: #eee; --sub: #888; 
+            --border: #333; --accent: #1d9bf0; --pixiv: #0096fa; --other: #00ba7c; --like: #f91880;
+            --input-bg: #202020;
+            --font-main: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+        }
+        body { 
+            background: var(--bg); color: var(--text); 
+            font-family: var(--font-main);
+            margin: 0; overflow-y: scroll; display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+        }
+        
+        .hidden { display: none !important; }
+        .btn { cursor: pointer; border: none; font-weight: bold; transition: 0.2s; }
+        
+        .header { 
+            width: 100%; max-width: 900px; position: sticky; top: 0; 
+            background: rgba(5, 5, 5, 0.85); backdrop-filter: blur(12px); 
+            z-index: 100; border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+        .header-inner { padding: 10px 20px; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        
+        .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+        .input-group { 
+            background: var(--input-bg); color: var(--text); border: 1px solid var(--border); 
+            border-radius: 8px; padding: 8px 12px; outline: none; font-size: 14px;
+        }
+        
+        input[type="date"] { font-family: inherit; color: var(--text); cursor: pointer; }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+
+        .sort-btn {
+            background: var(--input-bg); color: var(--text); border: 1px solid var(--border);
+            border-radius: 8px; padding: 8px 16px; font-size: 14px; display: flex; align-items: center; gap: 6px;
+        }
+        .sort-btn:hover { background: #333; }
+
+        .filter-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
+        .filter-btn { 
+            background: transparent; border: 1px solid var(--border); color: var(--sub); 
+            padding: 6px 14px; border-radius: 20px; font-size: 13px; white-space: nowrap; 
+        }
+        .filter-btn.active { background: var(--text); color: black; border-color: var(--text); }
+        .filter-btn:hover:not(.active) { background: rgba(255,255,255,0.1); }
+
+        .timeline { width: 100%; max-width: 900px; padding-bottom: 100px; }
+        
+        .card { 
+            background: var(--card-bg); border: 1px solid var(--border); 
+            border-radius: 12px; margin-bottom: 16px; padding: 16px;
+            display: flex; gap: 16px;
+            scroll-margin-top: 180px; /* ジャンプ時のスクロール位置調整 */
+        }
+        .card.highlight { border: 2px solid var(--accent); box-shadow: 0 0 15px rgba(29, 155, 240, 0.3); }
+        
+        .card-avatar { width: 48px; height: 48px; border-radius: 50%; background: #333; object-fit: cover; flex-shrink: 0; }
+        .card-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+        .meta-header { display: flex; justify-content: space-between; align-items: baseline; }
+        .user-info { display: flex; align-items: baseline; gap: 6px; overflow: hidden; }
+        .user-name { font-weight: bold; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-id { color: var(--sub); font-size: 14px; cursor: pointer; }
+        .user-id:hover { text-decoration: underline; }
+        .timestamp { color: var(--sub); font-size: 13px; }
+        
+        .badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 8px; }
+        .badge.pixiv { color: var(--pixiv); background: rgba(0, 150, 250, 0.15); }
+        .badge.tweet { color: var(--accent); background: rgba(29, 155, 240, 0.15); }
+        .badge.other { color: var(--other); background: rgba(0, 186, 124, 0.15); }
+
+        .post-title { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
+        .post-text { font-size: 15px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: #ddd; position: relative; }
+        .post-text.collapsed { max-height: 120px; overflow: hidden; mask-image: linear-gradient(to bottom, black 60%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%); }
+        .read-more-btn { background: none; border: none; color: var(--accent); padding: 0; margin-top: 4px; cursor: pointer; font-size: 14px; }
+
+        .media-container { margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+        .media-item { cursor: pointer; width: 100%; height: 100%; object-fit: cover; display: block; background: #000; transition: opacity 0.2s; }
+        .media-item:hover { opacity: 0.9; }
+
+        .layout-1 { display: block; max-height: 650px; width: auto; max-width: 100%; margin: 0 auto; }
+        .layout-1 img, .layout-1 video { max-height: 650px; width: 100%; object-fit: contain; background: #000; }
+
+        .media-grid { display: grid; gap: 2px; height: 350px; }
+        .grid-2 { grid-template-columns: 1fr 1fr; }
+        .grid-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+        .grid-3 :first-child { grid-row: span 2; }
+        .grid-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+        .media-carousel { display: flex; gap: 4px; overflow-x: auto; height: 300px; scrollbar-width: thin; scrollbar-color: #444 transparent; padding-bottom: 4px; }
+        .media-carousel::-webkit-scrollbar { height: 6px; }
+        .media-carousel::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        .media-carousel .media-item { width: auto; height: 100%; min-width: 200px; flex-shrink: 0; object-fit: cover; border-radius: 4px; }
+
+        .actions { display: flex; gap: 24px; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; }
+        .action-btn { background: none; color: var(--sub); display: flex; align-items: center; gap: 6px; font-size: 14px; padding: 0; cursor: pointer; border: none; }
+        .action-btn:hover { color: var(--text); }
+        .action-btn.liked { color: var(--like); }
+        .action-btn.link:hover { color: var(--accent); }
+
+        #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+        #lightbox.active { opacity: 1; pointer-events: auto; }
+        .lb-media { max-width: 98vw; max-height: 90vh; object-fit: contain; }
+        .lb-nav { margin-top: 15px; display: flex; gap: 20px; z-index: 2001; }
+        .lb-btn { background: rgba(255,255,255,0.1); color: white; border: 1px solid #555; padding: 8px 16px; border-radius: 20px; }
+        .lb-btn:hover { background: rgba(255,255,255,0.2); }
+
+        #settings { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 3000; display: flex; justify-content: center; align-items: center; }
+        .modal-box { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 450px; border: 1px solid var(--border); box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+        
+        .spinner { width: 24px; height: 24px; border: 3px solid #333; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s infinite; margin: 0 auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .load-prev-btn { width: 100%; background: var(--card-bg); border: 1px solid var(--border); color: var(--text); padding: 12px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; text-align: center; }
+        .load-prev-btn:hover { background: #222; }
+    </style>
+</head>
+<body>
+
+    <div id="lightbox" onclick="if(event.target===this) closeLb()">
+        <img id="lb-img" class="lb-media hidden" src="">
+        <video id="lb-vid" class="lb-media hidden" controls autoplay loop></video>
+        <div class="lb-nav">
+            <button class="btn lb-btn" onclick="prevLb()">← Prev</button>
+            <span id="lb-count" style="color:white; align-self:center; font-family:monospace;"></span>
+            <button class="btn lb-btn" onclick="nextLb()">Next →</button>
+            <button class="btn lb-btn" onclick="closeLb()">✕ Close</button>
+        </div>
+    </div>
+
+    <div id="settings" class="hidden">
+        <div class="modal-box">
+            <h2 style="margin-top:0;">設定</h2>
+            <p style="color:var(--sub); margin-bottom:10px;">データをスキャンする親フォルダのパスを入力してください</p>
+            <input type="text" id="pathInput" class="input-group" style="width:100%; box-sizing:border-box; margin-bottom:20px; font-family:monospace;">
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn" style="color:var(--sub); background:none;" onclick="toggleSettings()">キャンセル</button>
+                <button class="btn" style="background:var(--text); color:black; padding:8px 16px; border-radius:20px;" onclick="saveSettings()">保存してスキャン</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="header">
+        <div class="header-inner">
+            <div class="header-top">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h2 style="margin:0; font-size:20px;">Universal Viewer</h2>
+                    <span id="status" style="font-size:12px; color:var(--sub); border:1px solid var(--border); padding:2px 8px; border-radius:12px;">Ready</span>
+                </div>
+                <button class="btn" style="background:none; color:var(--text); font-size:1.5em;" onclick="toggleSettings()">⚙️</button>
+            </div>
+            
+            <div class="controls">
+                <select id="sourceSelect" class="input-group" style="font-weight:bold; min-width:120px;">
+                    <option value="all">全てのソース</option>
+                    <option value="pixiv">Pixiv</option>
+                    <option value="tweets">Twitter</option>
+                    <option value="others">Others</option>
+                </select>
+                <select id="folderSelect" class="input-group" style="max-width:200px;">
+                    <option value="ALL">全フォルダ</option>
+                </select>
+                
+                <input type="date" id="datePicker" class="input-group" title="日付にジャンプ">
+
+                <button id="sortBtn" class="btn sort-btn">
+                    <span>作成日: 新しい順</span> <span>⬇</span>
+                </button>
+
+                <input type="text" id="searchInput" class="input-group" placeholder="検索..." style="flex:1;">
+            </div>
+
+            <div class="filter-row">
+                <button class="filter-btn active" onclick="setFilter('all', this)">すべて</button>
+                <button class="filter-btn" onclick="setFilter('image', this)">画像</button>
+                <button class="filter-btn" onclick="setFilter('video', this)">動画</button>
+                <button class="filter-btn" onclick="setFilter('text', this)">文章</button>
+                <button class="filter-btn" onclick="setFilter('liked', this)">♥ お気に入り</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="timeline" id="timeline"></div>
+    <div id="loading" style="padding:40px; text-align:center; color:var(--sub);"></div>
+    <div id="anchor" style="height:50px;"></div>
+
+    <script>
+        let state = { 
+            offset: 0, limit: 100, isLoading: false, hasMore: true, filterType: 'all', 
+            sortOrder: 'desc', targetDate: null, 
+            lbImages: [], lbIndex: 0,
+            jumpId: null // ジャンプ先のID
+        };
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            checkStatus(); loadFolders();
+            
+            const scrollObserver = new IntersectionObserver(entries => {
+                if(entries[0].isIntersecting && !state.isLoading && state.hasMore) loadMore('older');
+            }, { rootMargin: '400px' });
+            scrollObserver.observe(document.getElementById('anchor'));
+
+            document.getElementById('sourceSelect').addEventListener('change', () => { 
+                document.getElementById('folderSelect').value = 'ALL';
+                loadFolders(); resetAndLoad(); 
+            });
+
+            document.getElementById('sortBtn').addEventListener('click', toggleSort);
+            
+            document.getElementById('datePicker').addEventListener('change', (e) => {
+                if(!e.target.value) {
+                    state.targetDate = null;
+                } else {
+                    const date = new Date(e.target.value);
+                    if (state.sortOrder === 'desc') date.setHours(23, 59, 59, 999);
+                    else date.setHours(0, 0, 0, 0);
+                    state.targetDate = date.getTime();
+                }
+                resetAndLoad();
+            });
+
+            ['folderSelect', 'searchInput'].forEach(id => {
+                document.getElementById(id).addEventListener('change', resetAndLoad);
+            });
+            
+            document.addEventListener('keydown', e => {
+                if(!document.getElementById('lightbox').classList.contains('active')) return;
+                if(e.key === 'ArrowRight') nextLb();
+                if(e.key === 'ArrowLeft') prevLb();
+                if(e.key === 'Escape') closeLb();
+            });
+        });
+
+        function toggleSort() {
+            const btn = document.getElementById('sortBtn');
+            if (state.sortOrder === 'desc') {
+                state.sortOrder = 'asc';
+                btn.innerHTML = '<span>作成日: 古い順</span> <span>⬆</span>';
+            } else {
+                state.sortOrder = 'desc';
+                btn.innerHTML = '<span>作成日: 新しい順</span> <span>⬇</span>';
+            }
+            // Sort changed implies date logic also flips, easier to just reset date picker usually
+            // but we keep targetDate if set
+            resetAndLoad();
+        }
+
+        // --- Jump Function ---
+        function jumpToItem(ts, id) {
+            // Reset filters to show everything
+            state.filterType = 'all';
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.filter-btn[onclick*="all"]').classList.add('active');
+
+            // Set UI Date
+            const date = new Date(ts);
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            document.getElementById('datePicker').value = `${yyyy}-${mm}-${dd}`;
+
+            state.targetDate = ts;
+            state.jumpId = id;
+            
+            // Reload with 'around' direction
+            document.getElementById('timeline').innerHTML = '';
+            state.offset = 0; state.hasMore = true;
+            
+            loadMore('around');
+        }
+
+        function setFilter(type, btn) {
+            state.filterType = type;
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            resetAndLoad();
+        }
+
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const st = document.getElementById('status');
+                if(!data.target_dir) toggleSettings(true);
+                if(data.is_scanning) {
+                    st.innerHTML = `<span style="color:var(--accent)">Scanning...</span>`;
+                    st.title = data.message;
+                    setTimeout(checkStatus, 2000);
+                } else {
+                    st.innerText = "Ready";
+                    st.title = data.message;
+                    if(data.target_dir && document.getElementById('timeline').children.length === 0) loadMore('older');
+                }
+                document.getElementById('pathInput').value = data.target_dir || "";
+            } catch { document.getElementById('status').innerText = "Offline"; }
+        }
+
+        async function loadFolders() {
+            try {
+                const source = document.getElementById('sourceSelect').value;
+                const res = await fetch(`/api/folders?source=${source}`);
+                const list = await res.json();
+                const sel = document.getElementById('folderSelect');
+                const current = sel.value;
+                sel.innerHTML = '<option value="ALL">全フォルダ</option>';
+                list.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f; opt.innerText = f;
+                    sel.appendChild(opt);
+                });
+                if(list.includes(current)) sel.value = current;
+                else sel.value = "ALL";
+            } catch {}
+        }
+
+        function resetAndLoad() {
+            document.getElementById('timeline').innerHTML = '';
+            state.offset = 0; state.hasMore = true; state.jumpId = null;
+            loadMore('older');
+        }
+
+        async function loadMore(direction) {
+            if(direction === 'older' && (state.isLoading || !state.hasMore)) return;
+            
+            state.isLoading = true;
+            if(direction === 'older') document.getElementById('loading').innerHTML = '<div class="spinner"></div>';
+
+            // Parameter Construction
+            let url = `/api/stream?limit=${state.limit}&offset=${state.offset}` +
+                      `&source=${document.getElementById('sourceSelect').value}` +
+                      `&sort=${state.sortOrder}` +
+                      `&folder=${encodeURIComponent(document.getElementById('folderSelect').value)}` +
+                      `&filter_type=${state.filterType}` +
+                      `&q=${encodeURIComponent(document.getElementById('searchInput').value)}` +
+                      `&direction=${direction}`;
+            
+            // Handle Dates based on direction
+            if(direction === 'around' && state.targetDate) {
+                url += `&target_date=${state.targetDate}`;
+            } else if(direction === 'newer') {
+                // Find top item date
+                const firstCard = document.querySelector('.card');
+                if(firstCard && firstCard.dataset.ts) {
+                    url += `&target_date=${firstCard.dataset.ts}`;
+                }
+            } else if(state.targetDate && direction === 'older' && state.offset === 0) {
+                // First load with date filter
+                url += `&target_date=${state.targetDate}`;
+            }
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                renderItems(data, direction);
+                
+                if(direction === 'older' || direction === 'around') {
+                    if(data.length < state.limit) state.hasMore = false;
+                    state.offset += data.length;
+                    document.getElementById('loading').innerText = state.hasMore ? "" : "End of content";
+                }
+            } catch(e) { 
+                console.error(e); 
+                document.getElementById('loading').innerText = "Error"; 
+            } finally { 
+                state.isLoading = false; 
+            }
+        }
+
+        function renderItems(items, direction) {
+            const container = document.getElementById('timeline');
+            const fragment = document.createDocumentFragment();
+
+            items.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'card';
+                el.id = `card-${item.id}`; // ID for jump
+                el.dataset.ts = item.timestamp; // TS for logic
+                
+                let badgeClass='other', badgeText='Other';
+                let avatar = item.avatar_url;
+                if(item.type === 'pixiv') { badgeClass='pixiv'; badgeText='Pixiv'; avatar='/viewer/pixiv_icon.png'; }
+                else if(item.type === 'tweet') { badgeClass='tweet'; badgeText='Twitter'; }
+                
+                const isLiked = item.is_liked;
+                const likeBtnClass = isLiked ? 'action-btn liked' : 'action-btn';
+                const likeIcon = isLiked ? '♥' : '♡';
+
+                let title = "", user = "Unknown", userId = item.folder;
+                let textContent = "";
+                let originalLink = "";
+
+                if(item.type === 'pixiv') {
+                    title = `<div class="post-title">${item.title}</div>`;
+                    user = item.author;
+                    originalLink = item.pixiv_url;
+                } else if(item.type === 'tweet') {
+                    user = item.user_name;
+                    textContent = escapeHtml(item.text);
+                    originalLink = item.tweet_url;
+                } else {
+                    title = `<div class="post-title" style="font-size:14px; color:#aaa;">${item.title}</div>`;
+                    user = "Unknown";
+                }
+
+                let textHtml = "";
+                if(textContent) {
+                    const isLong = textContent.length > 140 || (textContent.match(/\n/g)||[]).length > 3;
+                    const collapseClass = isLong ? 'collapsed' : '';
+                    const readMore = isLong ? `<button class="read-more-btn" onclick="this.previousElementSibling.classList.remove('collapsed'); this.remove()">...もっと見る</button>` : '';
+                    textHtml = `<div class="post-text ${collapseClass}">${textContent}</div>${readMore}`;
+                }
+
+                let mediaHtml = "";
+                if(item.media && item.media.length > 0) {
+                    const count = item.media.length;
+                    const imgsJson = JSON.stringify(item.media).replace(/"/g, '&quot;');
+                    
+                    if (count === 1) {
+                        const m = item.media[0];
+                        const tag = m.type === 'video' 
+                            ? `<video src="${m.url}" class="media-item" controls loop muted playsinline></video>`
+                            : `<img src="${m.url}" class="media-item" onclick="openLb(${imgsJson}, 0)">`;
+                        mediaHtml = `<div class="media-container layout-1">${tag}</div>`;
+                    } 
+                    else if (count >= 5) {
+                        let inner = "";
+                        item.media.forEach((m, i) => {
+                            if(m.type==='video') inner += `<video src="${m.url}" class="media-item" muted loop onmouseover="this.play()" onmouseout="this.pause()" onclick="openLb(${imgsJson}, ${i})"></video>`;
+                            else inner += `<img src="${m.url}" class="media-item" loading="lazy" onclick="openLb(${imgsJson}, ${i})">`;
+                        });
+                        mediaHtml = `<div class="media-container media-carousel">${inner}</div>`;
+                    } 
+                    else {
+                        let gridClass = count === 2 ? 'grid-2' : count === 3 ? 'grid-3' : 'grid-4';
+                        let inner = "";
+                        item.media.forEach((m, i) => {
+                            if(m.type==='video') inner += `<video src="${m.url}" class="media-item" muted loop onmouseover="this.play()" onmouseout="this.pause()" onclick="openLb(${imgsJson}, ${i})"></video>`;
+                            else inner += `<img src="${m.url}" class="media-item" loading="lazy" style="object-fit:cover;" onclick="openLb(${imgsJson}, ${i})">`;
+                        });
+                        mediaHtml = `<div class="media-container media-grid ${gridClass}">${inner}</div>`;
+                    }
+                }
+
+                const dateStr = new Date(item.timestamp).toLocaleString();
+                
+                el.innerHTML = `
+                    <img class="card-avatar" src="${avatar}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23333%22 width=%22100%22 height=%22100%22/></svg>'">
+                    <div class="card-content">
+                        <div class="meta-header">
+                            <div class="user-info">
+                                <span class="user-name">${user}</span>
+                                <span class="user-id" onclick="setFolder('${userId}')">@${userId}</span>
+                                <span class="badge ${badgeClass}">${badgeText}</span>
+                            </div>
+                            <span class="timestamp">${dateStr}</span>
+                        </div>
+                        
+                        ${title}
+                        ${textHtml}
+                        ${mediaHtml}
+                        
+                        <div class="actions">
+                            <button class="${likeBtnClass}" onclick="toggleLike('${item.type}', '${item.id}', this)">
+                                <span>${likeIcon}</span> <span>Like</span>
+                            </button>
+                            
+                            <button class="action-btn" onclick="jumpToItem(${item.timestamp}, '${item.id}')">
+                                <span>📅</span> <span>周辺を見る</span>
+                            </button>
+
+                            ${originalLink ? `<a href="${originalLink}" target="_blank" class="action-btn link"><span>🔗</span> Source</a>` : ''}
+                        </div>
+                    </div>
+                `;
+                fragment.appendChild(el);
+            });
+
+            // Insert into DOM
+            if (direction === 'newer') {
+                // Add to Top
+                // Remove existing load prev btn if any
+                const prevBtn = document.getElementById('loadPrevBtn');
+                if(prevBtn) prevBtn.remove();
+                
+                container.prepend(fragment);
+                
+                // Add button back if needed
+                if(items.length > 0) addLoadPrevBtn();
+                
+            } else {
+                // Add to Bottom
+                if(direction === 'around') {
+                    container.innerHTML = ''; // Reset
+                    addLoadPrevBtn(); // Add top button
+                }
+                
+                // If it's standard load, check if we need top button (if offset > 0)
+                if(state.offset > 0 && !document.getElementById('loadPrevBtn')) addLoadPrevBtn();
+
+                container.appendChild(fragment);
+                
+                // Scroll to target if jumping
+                if(direction === 'around' && state.jumpId) {
+                    setTimeout(() => {
+                        const target = document.getElementById(`card-${state.jumpId}`);
+                        if(target) {
+                            target.classList.add('highlight');
+                            target.scrollIntoView({behavior: 'smooth', block: 'center'});
+                        }
+                    }, 100);
+                }
+            }
+        }
+
+        function addLoadPrevBtn() {
+            if(document.getElementById('loadPrevBtn')) return;
+            const btn = document.createElement('div');
+            btn.id = 'loadPrevBtn';
+            btn.className = 'load-prev-btn';
+            btn.innerText = '↑ Load Previous / Newer';
+            btn.onclick = () => loadMore('newer');
+            document.getElementById('timeline').prepend(btn);
+        }
+
+        function setFolder(name) {
+            const sel = document.getElementById('folderSelect');
+            for(let o of sel.options) if(o.value === name) { sel.value = name; resetAndLoad(); return; }
+        }
+
+        async function toggleLike(type, id, btn) {
+            const isLiked = btn.classList.contains('liked');
+            if(isLiked) {
+                btn.classList.remove('liked');
+                btn.querySelector('span').innerText = '♡';
+            } else {
+                btn.classList.add('liked');
+                btn.querySelector('span').innerText = '♥';
+            }
+            await fetch(`/api/like/${type}/${id}`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({liked: !isLiked})
+            });
+        }
+
+        function toggleSettings(force=false) {
+            const el = document.getElementById('settings');
+            if(force) el.classList.remove('hidden'); else el.classList.toggle('hidden');
+        }
+        async function saveSettings() {
+            const path = document.getElementById('pathInput').value;
+            await fetch('/api/settings/path', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path}) });
+            toggleSettings(); checkStatus();
+        }
+        
+        function escapeHtml(text) { return text ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : ""; }
+
+        window.openLb = (imgs, idx) => { state.lbImages = imgs; state.lbIndex = idx; updateLb(); document.getElementById('lightbox').classList.add('active'); };
+        window.closeLb = () => { document.getElementById('lightbox').classList.remove('active'); const v = document.getElementById('lb-vid'); v.pause(); v.src=""; };
+        window.nextLb = () => { if(state.lbIndex < state.lbImages.length-1) { state.lbIndex++; updateLb(); }};
+        window.prevLb = () => { if(state.lbIndex > 0) { state.lbIndex--; updateLb(); }};
+
+        function updateLb() {
+            const item = state.lbImages[state.lbIndex];
+            const imgEl = document.getElementById('lb-img');
+            const vidEl = document.getElementById('lb-vid');
+            
+            if(item.type === 'video') { 
+                imgEl.classList.add('hidden'); vidEl.classList.remove('hidden'); 
+                vidEl.src = item.url; vidEl.muted = false; vidEl.play().catch(()=>{}); 
+            } else { 
+                vidEl.classList.add('hidden'); vidEl.pause(); 
+                imgEl.classList.remove('hidden'); imgEl.src = item.url; 
+            }
+            document.getElementById('lb-count').innerText = `${state.lbIndex+1} / ${state.lbImages.length}`;
+        }
+    </script>
+</body>
+</html>
